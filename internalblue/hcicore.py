@@ -256,7 +256,7 @@ class HCICore(InternalBlue):
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
-                timeout=1,              # Read timeout
+                timeout=0,              # Read timeout
                 rtscts=True            # Enable hardware flow control
             )
             self.s_snoop = SerialSocketWrapper(ser)
