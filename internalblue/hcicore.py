@@ -218,6 +218,8 @@ class HCICore(InternalBlue):
 
         if os.path.exists('/dev/ttyTHS1'):
             device_list.append(
+                (self, 'scp-agent', 'UART over scp socket: /dev/ttyTHS1'))
+            device_list.append(
                 (self, '/dev/ttyTHS1', 'UART hci: /dev/ttyTHS1'))
 
         if len(device_list) == 0:
@@ -233,6 +235,9 @@ class HCICore(InternalBlue):
             self.logger.warn("No HCI identifier is set")
             return False
 
+        if self.interface == 'scp-agent':
+            return self._setup_scp_agent_socket()
+
         if self.interface == '/dev/ttyTHS1':
             return self._setup_uart_socket(self.interface)
 
@@ -246,6 +251,31 @@ class HCICore(InternalBlue):
             return False
 
         return True
+
+    def _setup_scp_agent_socket(self):
+        # Try to connect to the abstract socket that the scp-agent project
+        # exposes from the scp process.
+        # The IO of this socket will be multiplexed with the IO of the scp process.
+        # This will allow InternalBlue and scp to coexist by sharing the same file descriptor
+        #   to /dev/ttyTHS1
+        # This also means that all events sent from the controller will be received by both
+        #   InternalBlue and scp, and include responses to HCI packets sent by both processes!
+        # The internalblue HCI parsing implementation relies on filtering interesting packets
+        #   from the raw HCI byte stream. So this should not affect InternalBlue's operation.
+        # I am not sure if the same approach is taken by scp but let's hope it doesn't affect anything.
+        scp_socket = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+        try:
+            scp_socket.connect('\0scp-agent_socket')
+            self.s_snoop = scp_socket
+            self.s_inject = self.s_snoop
+            self._writeBTSnoopHeader()
+            return True
+        except socket.error:
+            self.logger.warn(
+                "Connecting to scp-agent socket failed."
+            )
+            scp_socket.close()
+        return False
 
     def _setup_uart_socket(self, device_path):
         # Configure the serial port with software flow control
