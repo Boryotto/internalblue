@@ -247,6 +247,14 @@ class InternalBlueCLI(cmd2.Cmd):
                 self.logger.critical("No connection to target device.")
                 exit(-1)
 
+            if self.internalblue.interface == 'scp-agent':
+                self.logger.info("Applying Read_RAM and Write_RAM patches")
+                # Patch mk_HandleRead_RAM to accept every address (Spectre bypass)
+                self.writeMem(0x000d87d0, bytes.fromhex('0ee0'))
+                # Patch mk_HandleWrite_RAM to accept every address (Spectre bypass)
+                self.writeMem(0x000d8782, bytes.fromhex('0ee0'))
+
+
             # now we have firmware info and can set firmware-specific variables
             self.memory_image_template_filename = (
                     self.internalblue.data_directory + "/memdump_" + self.internalblue.fw.FW_NAME + "_template.bin"
