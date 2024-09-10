@@ -79,6 +79,7 @@ class HCICore(InternalBlue):
         self.serial = False
         self.doublecheck = False
         self.user_channel = user_channel
+        self.record_data_buffer = bytearray(0)
 
     def getHciDeviceList(self):
         # type: () -> List[Device]
@@ -333,8 +334,7 @@ class HCICore(InternalBlue):
         while not self.exit_requested:
             # Read the record data
             try:
-                record_data = self.s_snoop.recv(1024)
-                record_data = bytearray(record_data)
+                self.record_data_buffer += self.s_snoop.recv(1024)
             except socket.timeout:
                 continue  # this is ok. just try again without error
             except Exception as e:
@@ -344,6 +344,16 @@ class HCICore(InternalBlue):
                     )
                 )
                 self.exit_requested = True
+                continue
+
+            try:
+                parsed_packet = hci.parse_hci_packet(self.record_data_buffer)
+                record_data = parsed_packet.getRaw()
+                self.record_data_buffer = self.record_data_buffer[len(
+                    record_data):]
+            except ValueError as e:
+                # We didn't receive the full packet data yet.
+                self.logger.info(f"We didn't receive the full packet data yet: {e}")
                 continue
 
             # btsnoop record header data:
@@ -358,7 +368,7 @@ class HCICore(InternalBlue):
 
             # Put all relevant infos into a tuple. The HCI packet is parsed with the help of hci.py.
             record = (
-                hci.parse_hci_packet(record_data),
+                parsed_packet,
                 btsnoop_orig_len,
                 btsnoop_inc_len,
                 btsnoop_flags,
