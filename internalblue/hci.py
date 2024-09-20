@@ -623,9 +623,10 @@ class HCI_Cmd(HCI):
         HCI.__init__(self, HCI.HCI_CMD)
         self.opcode = opcode
         self.length = length
-        self.data = data
-        if len(self.data) < self.length:
-            raise ValueError("HCI Cmd packet data doesn't match the specified length")
+        if len(data) < self.length:
+            raise ValueError(
+                "HCI Cmd packet data doesn't match the specified length")
+        self.data = data[:length]
 
     def getRaw(self):
         return (
@@ -668,9 +669,10 @@ class HCI_Acl(HCI):
         self.bp = bp
         self.bc = bc
         self.length = length
-        self.data = data
-        if len(self.data) < self.length:
-            raise ValueError("HCI Acl packet data doesn't match the specified length")
+        if len(data) < self.length:
+            raise ValueError(
+                "HCI Acl packet data doesn't match the specified length")
+        self.data = data[:length]
 
 
 class HCI_Sco(HCI):
@@ -693,9 +695,10 @@ class HCI_Sco(HCI):
         self.handle = handle
         self.ps = ps
         self.length = length
-        self.data = data
-        if len(self.data) < self.length:
-            raise ValueError("HCI Sco packet data doesn't match the specified length")
+        if len(data) < self.length:
+            raise ValueError(
+                "HCI Sco packet data doesn't match the specified length")
+        self.data = data[:length]
 
 
 class HCI_Diag(HCI):
@@ -716,10 +719,11 @@ class HCI_Diag(HCI):
     def __init__(self, opcode, data):
         HCI.__init__(self, HCI.BCM_DIAG)
         self.opcode = opcode
-        self.length = 63  # fixed length
-        self.data = data
-        if len(self.data) < self.length:
-            raise ValueError("HCI Diag packet data doesn't match the specified length")
+        self.length = 62  # fixed length
+        if len(data) < self.length:
+            raise ValueError(
+                "HCI Diag packet data doesn't match the specified length")
+        self.data = data[:self.length]
 
     def __str__(self):
         parent = HCI.__str__(self)
@@ -924,9 +928,10 @@ class HCI_Event(HCI):
         HCI.__init__(self, HCI.HCI_EVT)
         self.event_code = event_code
         self.length = length
-        self.data = data
-        if len(self.data) < self.length:
-            raise ValueError("HCI Event packet data doesn't match the specified length")
+        if len(data) < self.length:
+            raise ValueError(
+                "HCI Event packet data doesn't match the specified length")
+        self.data = data[:length]
 
     def getRaw(self):
         return (
