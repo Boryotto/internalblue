@@ -331,6 +331,7 @@ class HCICore(InternalBlue):
 
         self.logger.debug("Receive Thread started.")
 
+        self.partial_parse = False
         while not self.exit_requested:
             # Read the record data
             try:
@@ -351,9 +352,14 @@ class HCICore(InternalBlue):
                 record_data = parsed_packet.getRaw()
                 self.record_data_buffer = self.record_data_buffer[len(
                     record_data):]
+                if self.partial_parse:
+                    print("Recevied the full packet.")
+                self.partial_parse = False
             except ValueError as e:
                 # We didn't receive the full packet data yet.
-                self.logger.info(f"We didn't receive the full packet data yet: {e}")
+                self.logger.info(
+                    f"We didn't receive the full packet data yet: {e}")
+                self.partial_parse = True
                 continue
 
             # btsnoop record header data:
