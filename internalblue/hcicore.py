@@ -336,6 +336,8 @@ class HCICore(InternalBlue):
             # Read the record data
             try:
                 self.record_data_buffer += self.s_snoop.recv(1024)
+                if len(self.record_data_buffer) == 0:
+                    continue
             except socket.timeout:
                 continue  # this is ok. just try again without error
             except Exception as e:
