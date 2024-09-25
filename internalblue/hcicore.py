@@ -331,13 +331,16 @@ class HCICore(InternalBlue):
 
         self.logger.debug("Receive Thread started.")
 
-        self.partial_parse = False
         while not self.exit_requested:
             # Read the record data
             try:
-                self.record_data_buffer += self.s_snoop.recv(1024)
-                if len(self.record_data_buffer) == 0:
-                    continue
+                try:
+                    # If we still have packets we didn't handle there is no need to poll for more
+                    hci.parse_hci_packet(self.record_data_buffer)
+                except:
+                    self.record_data_buffer += self.s_snoop.recv(1024)
+                    if len(self.record_data_buffer) == 0:
+                        continue
             except socket.timeout:
                 continue  # this is ok. just try again without error
             except Exception as e:
@@ -351,17 +354,15 @@ class HCICore(InternalBlue):
 
             try:
                 parsed_packet = hci.parse_hci_packet(self.record_data_buffer)
+                self.logger.debug(f"Parsed packet: {parsed_packet} record_buffer_len: {
+                                  len(self.record_data_buffer)}")
                 record_data = parsed_packet.getRaw()
                 self.record_data_buffer = self.record_data_buffer[len(
                     record_data):]
-                if self.partial_parse:
-                    print("Recevied the full packet.")
-                self.partial_parse = False
             except ValueError as e:
                 # We didn't receive the full packet data yet.
                 self.logger.info(
                     f"We didn't receive the full packet data yet: {e}")
-                self.partial_parse = True
                 continue
 
             # btsnoop record header data:
