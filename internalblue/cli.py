@@ -1243,7 +1243,7 @@ class InternalBlueCLI(cmd2.Cmd):
             else:
                 self.logger.warning("Address or Slot number required!")
                 return False
-            return self.internalblue.disableRomPatch(args.address, args.slot)
+            return None if self.internalblue.disableRomPatch(args.address, args.slot) else False
 
         if args.address is None:
             self.logger.warning("Address is required!")
@@ -1286,7 +1286,7 @@ class InternalBlueCLI(cmd2.Cmd):
             if not answer:
                 return False
 
-        return self.internalblue.patchRom(args.address, data, args.slot)
+        return None if self.internalblue.patchRom(args.address, data, args.slot) else False
 
     sendlmp_parser = argparse.ArgumentParser()
     sendlmp_parser.add_argument('-c', '--conn_handle', type=auto_int,
