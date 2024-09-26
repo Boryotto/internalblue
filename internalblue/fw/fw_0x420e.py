@@ -44,55 +44,76 @@ class CYW20739B1(FirmwareDefinition):
 
     # Firmware Infos
     # Evaluation Kit CYW920719, which is also named CYW20739 internally, because they like fuzzy name definitions
-    FW_NAME = "CYW20739B1 (NOT iPhone X/XR!)"
+    FW_NAME = "BCM89359"
     # TODO this is not the iPhone firmware, we need to add a switch in fw.py
 
     # Device Infos
     DEVICE_NAME = (
         0x280CD0  # rm_deviceLocalName, FIXME has no longer a length byte prepended
     )
-    BD_ADDR = 0x280CA4  # rm_deviceBDAddr
+    BD_ADDR = 0x00201df8  # rm_deviceBDAddr
 
     # Heap
-    BLOC_HEAD = 0x0200C7C  # g_dynamic_memory_GeneralUsePools
+    BLOC_HEAD = 0x0020061c  # g_dynamic_memory_GeneralUsePools
     BLOC_NG = True  # Next Generation Bloc Buffer
 
     # Memory Sections
     #                          start,    end,           is_rom? is_ram?
     SECTIONS = [
-        MemorySection(0x00000000, 0x001FFFFF, True, False),  # Internal ROM
-        MemorySection(0x00200000, 0x0024FFFF, False, True),  # Internal Memory Cortex M3
-        MemorySection(
-            0x00270000, 0x0027FFFF, False, True
-        ),  # Internal Memory Patchram Contents
-        MemorySection(0x00280000, 0x00283FFF, False, True),  # ToRam
+        MemorySection(0x00000000, 0xc9fff, False, True),  # Internal ROM
+        MemorySection(0x000D0000, 0x000DFFFF, False, True),  # PatchRam
+        # Internal Memory Cortex M3
+        MemorySection(0x00200000, 0x0022FFFF, False, True),
+        MemorySection(0x00300000, 0x003007ff, False, True),  # MMIO
+        MemorySection(0x00310000, 0x00321fff, False, True),  # MMIO
+        MemorySection(0x00326000, 0x0032ffff, False, True),  # MMIO
+        MemorySection(0x00338000, 0x00367fff, False, True),  # MMIO
+        MemorySection(0x00370000, 0x0037ffff, False, True),  # MMIO
+        MemorySection(0x00390000, 0x00397fff, False, True),  # MMIO
+        MemorySection(0x00410000, 0x00413fff, False, True),  # MMIO
+        MemorySection(0x00420000, 0x00423fff, False, True),  # MMIO
+        MemorySection(0x00600000, 0x006007ff, False, True),  # MMIO
+        MemorySection(0x00640000, 0x006407ff, False, True),  # MMIO
+        MemorySection(0x00650000, 0x006507ff, False, True),  # MMIO
+        MemorySection(0x00651000, 0x006517ff, False, True),  # MMIO
+        # ARM Private Peripheral busד
+        MemorySection(0xE0000000, 0xE00FFFFF, False, True),
+
     ]
 
     # Patchram
     PATCHRAM_TARGET_TABLE_ADDRESS = Address(0x310000)
-    PATCHRAM_ENABLED_BITMAP_ADDRESS = Address(0x310404)
-    PATCHRAM_VALUE_TABLE_ADDRESS = Address(0x270000)
-    PATCHRAM_NUMBER_OF_SLOTS = 256
+    PATCHRAM_ENABLED_BITMAP_ADDRESS = Address(0x00310304)
+    PATCHRAM_VALUE_TABLE_ADDRESS = Address(0x000d0000)
+    PATCHRAM_NUMBER_OF_SLOTS = 192
     PATCHRAM_ALIGNED = False
     # only seems to work 4-byte aligned here ...
 
     # Launch_RAM is faulty so we need to overwrite it. This is the position of the handler.
-    LAUNCH_RAM = 0x1AB218
-    HCI_EVENT_COMPLETE = 0x1A9D6
+    LAUNCH_RAM = 0x000bbc80
+    HCI_EVENT_COMPLETE = 0x000015d6
+
+    # Connection Struct and Table
+    CONNECTION_LIST_ADDRESS = 0x00221914  # pRm_whole_conn = 0x280C9C points to this
+    CONNECTION_MAX = 11  # g_bt_max_connections = 0 in firmware
+    CONNECTION_STRUCT_LENGTH = 0x168  # ??
 
     # Enable enhanced advertisement reports (bEnhancedAdvReport)
-    ENHANCED_ADV_REPORT_ADDRESS = Address(0x2829AE)
+    ENHANCED_ADV_REPORT_ADDRESS = Address(0x00202e08)
+
+    # Snippet for fuzzLmp()
+    # execute standard SendLmpPdu HCI to fill parameters
+    FUZZLMP_HOOK_ADDRESS = 0x00078c96
 
     # Assembler snippet for tracepoints
     # In contrast to the Nexus 5 patch, we uninstall ourselves automatically and use internal debug functions
-    TRACEPOINT_BODY_ASM_LOCATION = 0x00223100
-    TRACEPOINT_HOOKS_LOCATION = 0x00223200
+    TRACEPOINT_BODY_ASM_LOCATION = 0x0022a000
+    TRACEPOINT_HOOKS_LOCATION = 0x0022a200
     TRACEPOINT_HOOK_SIZE = 40
     TRACEPOINT_HOOK_ASM = """
             push {r0-r12, lr}       // save all registers on the stack (except sp and pc)
             ldr  r6, =0x%x          // addTracepoint() injects pc of original tracepoint here
-            mov  r0, %d             // addTracepoint() injects the patchram slot of the hook patch
-            bl   0x34964            // patch_uninstallPatchEntry(slot)
+            mov  r7, %d             // addTracepoint() injects the patchram slot of the hook patch
             bl   0x%x               // addTracepoint() injects TRACEPOINT_BODY_ASM_LOCATION here
             pop  {r0-r12, lr}       // restore registers
     
@@ -101,7 +122,11 @@ class CYW20739B1(FirmwareDefinition):
     """
 
     TRACEPOINT_BODY_ASM_SNIPPET = """
+
             mov   r8, lr     // save link register in r8
+
+            mov  r0, r7      // r7 still contains the patchram slot number
+            bl   patch_uninstallPatchEntry     // disable_patchram_slot(slot)
     
             // dump registers like before
     
@@ -111,7 +136,7 @@ class CYW20739B1(FirmwareDefinition):
             // malloc HCI event buffer
             mov  r0, 0xff    // event code is 0xff (vendor specific HCI Event)
             mov  r1, 76      // buffer size: size of registers (68 bytes) + type and length + 'TRACE_'
-            bl   0xF7B6      // hci_allocateEventBlockWithLen(0xff, 78)
+            bl   0x186ca      // hci_allocateEventBlockWithLen(0xff, 78)
             mov  r4, r0      // save pointer to the buffer in r4
     
             // append our custom header (the word 'TRACE_') after the event code and event length field
@@ -140,18 +165,55 @@ class CYW20739B1(FirmwareDefinition):
             // store other registers
             mov  r1, sp
             mov  r2, 56
-            bl   0xAF0BC     // memcpy(dst, src, len)
+            bl   0x95a88     // memcpy(dst, src, len)
     
             // send HCI buffer to the host
             mov  r0, r4      // r4 still points to the beginning of the HCI buffer
-            bl   0xF782      // hci_sendEvent
-    
+            bl   0x18696      // hci_sendEvent
+            
             // restore status register
             msr  cpsr_f, r5
     
-            bl 0x2D702       // bthci_event_vs_DBFW_CoreDumpRAMImageEvent
+            // bl 0xc24       // bthci_event_vs_DBFW_CoreDumpRAMImageEvent
     
             mov  lr, r8      // restore lr from r8
             bx   lr          // return
     
+    // Adapted implementaion of patch_uninstallPatchEntry(int slot):
+    patch_uninstallPatchEntry:
+            cmp        r0,#0xc0
+            bcc        do_uninstallPatch
+            b          data_patch_uninstallPatchEntry
+    do_uninstallPatch:            
+            mov.w      r2, #0x310000
+            add        r2, #0x304
+            lsrs       r1,r0,#0x5
+            add.w      r1,r2,r1, lsl #0x2
+            and        r0,r0,#0x1f
+            ldr        r2,[r1,#0x0]
+            movs       r3,#0x1
+            lsls       r3,r0
+            bics       r2,r3
+            str        r2,[r1,#0x0]
+            bx         lr
+
+            
+    data_patch_uninstallPatchEntry:
+
+            sub.w      r1,r0,#0xc0
+            lsls       r0,r0,#0x2
+            sub.w      r0,r0,#0x300
+            add.w      r0,r0,#0x310000
+            movw       r2,#0xffff
+            str.w      r2,[r0,#0x320]         
+
+            push       {r4,lr}
+            mov.w      r2, #0x310000
+            add        r2, #0x31c
+            ldr        r4,[r2,#0x0]                                 
+            movs       r3,#0x1
+            lsls       r3,r1
+            bics       r4,r3
+            str        r4,[r2,#0x0]                                 
+            pop        {r4,pc}
     """
