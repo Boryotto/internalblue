@@ -421,7 +421,7 @@ class InternalBlue(with_metaclass(ABCMeta, object)):
         if hcipkt.event_code != 0xFF:  # must be custom event (0xff)
             return
 
-        if hcipkt.data[0:6] == "TRACE_":  # My custom header (see hook code)
+        if hcipkt.data[0:6] == b"TRACE_":  # My custom header (see hook code)
             data = hcipkt.data[6:]
             tracepoint_registers = [u32(data[i: i + 4]) for i in range(0, 68, 4)]
             pc = tracepoint_registers[0]
